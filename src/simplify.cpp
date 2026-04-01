@@ -7,9 +7,17 @@
 // min-heap comparator
 struct CandCmp
 {
-    bool operator()(const Candidate& a, const Candidate& b) const
+    bool operator()(const Candidate& lhs, const Candidate& rhs) const
     {
-        return a.displacement > b.displacement; // min-heap
+        constexpr double EPS = 1e-12;
+
+        if (lhs.displacement > rhs.displacement + EPS) return true;
+        if (rhs.displacement > lhs.displacement + EPS) return false;
+
+        if (lhs.a != rhs.a) return lhs.a > rhs.a;
+        if (lhs.b != rhs.b) return lhs.b > rhs.b;
+        if (lhs.c != rhs.c) return lhs.c > rhs.c;
+        return lhs.d > rhs.d;
     }
 };
 

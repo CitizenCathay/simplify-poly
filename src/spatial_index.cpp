@@ -5,17 +5,18 @@
 
 void UniformGrid::build(const VertexPool& pool, int grid_res)
 {
-    // compute bounding box
     min_x = min_y =  1e18;
     max_x = max_y = -1e18;
-    for (auto& v : pool.verts)
+
+    for (const auto& v : pool.verts)
     {
         if (!v.active) continue;
-        min_x = std::min(min_x, v.x); max_x = std::max(max_x, v.x);
-        min_y = std::min(min_y, v.y); max_y = std::max(max_y, v.y);
+        min_x = std::min(min_x, v.x);
+        max_x = std::max(max_x, v.x);
+        min_y = std::min(min_y, v.y);
+        max_y = std::max(max_y, v.y);
     }
 
-    // pad slightly to avoid boundary issues
     min_x -= 1e-9; min_y -= 1e-9;
     max_x += 1e-9; max_y += 1e-9;
 
@@ -30,14 +31,20 @@ void UniformGrid::build(const VertexPool& pool, int grid_res)
 
     cells.assign(cols * rows, {});
 
-    // insert all active segments
-    for (auto& v : pool.verts)
+    // Insert every active polygon edge exactly once by walking each ring.
+    for (int r = 0; r < pool.num_rings; ++r)
     {
-        if (!v.active) continue;
-        int u = (int)(&v - pool.verts.data());
-        int w = v.next;
-        if (w > u) // insert each segment once
-            insert_segment(pool, u, w);
+        if (pool.ring_size(r) < 2) continue;
+
+        int start = pool.ring_heads[r];
+        int u = start;
+        do
+        {
+            int v = pool.next_of(u);
+            if (pool.verts[u].active && pool.verts[v].active)
+                insert_segment(pool, u, v);
+            u = v;
+        } while (u != start);
     }
 }
 
