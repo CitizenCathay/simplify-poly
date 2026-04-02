@@ -98,14 +98,19 @@ double simplify(VertexPool& pool, int target_vertices)
         int prev_a = pool.prev_of(cand.a);
         int next_d = pool.next_of(cand.d);
 
-        // segments to skip: all three being removed + adjacent sharing endpoints
+        // Each skip list includes the three removed segments plus BOTH adjacent
+        // segments (the one sharing A and the one sharing D). This prevents
+        // false intersection hits from segments that share the new edge's
+        // far endpoint after the grid has been updated by prior collapses.
         std::vector<std::pair<int,int>> skip_ae = {
             {cand.a, cand.b}, {cand.b, cand.c}, {cand.c, cand.d},  // removed
-            {prev_a, cand.a}  // shares endpoint A with new edge A->E
+            {prev_a, cand.a},  // shares endpoint A with new edge A->E
+            {cand.d, next_d}   // shares endpoint E (far end of A->E) with E->D
         };
         std::vector<std::pair<int,int>> skip_ed = {
             {cand.a, cand.b}, {cand.b, cand.c}, {cand.c, cand.d},  // removed
-            {cand.d, next_d}  // shares endpoint D with new edge E->D
+            {cand.d, next_d},  // shares endpoint D with new edge E->D
+            {prev_a, cand.a}   // shares endpoint E (near end of E->D) with A->E
         };
 
         bool ok = true;

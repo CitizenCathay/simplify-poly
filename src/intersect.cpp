@@ -48,12 +48,21 @@ namespace
         else
             return interval_overlap_strict(ay, by, cy, dy);
     }
+
+    static bool on_segment_eps(double ax, double ay,
+                           double bx, double by,
+                           double px, double py)
+    {
+        return sign_eps(orient(ax, ay, bx, by, px, py)) == 0 &&
+            px >= std::min(ax, bx) - EPS && px <= std::max(ax, bx) + EPS &&
+            py >= std::min(ay, by) - EPS && py <= std::max(ay, by) + EPS;
+    }
 }
 
 bool segments_intersect(double ax, double ay, double bx, double by,
                         double cx, double cy, double dx, double dy)
 {
-    // Ignore shared endpoints exactly as the header says.
+    // Still ignore exact shared endpoints.
     if (same_point(ax, ay, cx, cy) || same_point(ax, ay, dx, dy) ||
         same_point(bx, by, cx, cy) || same_point(bx, by, dx, dy))
         return false;
@@ -72,11 +81,15 @@ bool segments_intersect(double ax, double ay, double bx, double by,
     if (s1 * s2 < 0 && s3 * s4 < 0)
         return true;
 
-    // Collinear overlap with interior overlap counts as intersection.
+    // Collinear case
     if (s1 == 0 && s2 == 0 && s3 == 0 && s4 == 0)
         return collinear_overlap_interior(ax, ay, bx, by, cx, cy, dx, dy);
 
-    // Touching at a non-shared endpoint or lying on the other segment is not
-    // treated as a strict crossing for your topology check.
+    // Non-shared touching / endpoint-on-segment should count as intersection
+    if (s1 == 0 && on_segment_eps(ax, ay, bx, by, cx, cy)) return true;
+    if (s2 == 0 && on_segment_eps(ax, ay, bx, by, dx, dy)) return true;
+    if (s3 == 0 && on_segment_eps(cx, cy, dx, dy, ax, ay)) return true;
+    if (s4 == 0 && on_segment_eps(cx, cy, dx, dy, bx, by)) return true;
+
     return false;
 }

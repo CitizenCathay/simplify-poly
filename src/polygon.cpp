@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <cmath>
 #include <iostream>
+#include <iomanip>
 
 // ── CSV parser ────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,7 @@ double VertexPool::total_signed_area() const
 
 void VertexPool::write_csv() const
 {
+    std::cout << std::setprecision(15);
     std::cout << "ring_id,vertex_id,x,y\n";
     for (int r = 0; r < num_rings; ++r)
     {
