@@ -68,3 +68,14 @@ an overlayed SVG for the experimental data sets. You must run run_tests.sh befor
 ```bash
 bash run_overlay.sh
 ```
+
+## Troubleshooting
+
+### 1. Fix Script Error: `invalid option name: pipefail`
+If you encounter an error like `invalid option name set: pipefail` when running the test script in WSL, it is caused by **Windows-style line endings (CRLF)**. This happens if the script was edited in a Windows text editor.
+
+**To fix this, run the following command in your WSL terminal:**
+
+```bash
+sed -i 's/\r$//' <filename>.sh
+```
