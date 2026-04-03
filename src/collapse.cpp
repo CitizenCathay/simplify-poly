@@ -26,10 +26,16 @@
 #include "collapse.h"
 #include <cmath>
 #include <limits>
+#include <algorithm>
 
 namespace
 {
     constexpr double EPS = 1e-12;
+
+    static bool same_point(double ax, double ay, double bx, double by)
+    {
+        return std::abs(ax - bx) <= 1e-9 && std::abs(ay - by) <= 1e-9;
+    }
 
     /*!
     \brief
@@ -76,7 +82,9 @@ namespace
         double dp = a * px + b * py + c;
         double dq = a * qx + b * qy + c;
         double denom = dp - dq;
-        if (std::abs(denom) < EPS) return false;
+        double scale = std::max({1.0, std::abs(dp), std::abs(dq)});
+        if (std::abs(denom) <= 1e-9 * scale)
+            return false;
 
         double t = dp / denom;
         ix = px + t * (qx - px);
@@ -318,38 +326,116 @@ Candidate make_candidate(const VertexPool& pool, int a, int b, int c, int d)
 
     double ex = 0.0, ey = 0.0;
     bool ok = false;
+    bool actual_use_AB = use_AB;
 
-    if (use_AB)
+    if (actual_use_AB)
     {
         ok = line_line_intersect(a_coeff, b_coeff, c_coeff,
-                                 A.x, A.y, B.x, B.y, ex, ey);
+                                A.x, A.y, B.x, B.y, ex, ey);
     }
     else
     {
         ok = line_line_intersect(a_coeff, b_coeff, c_coeff,
-                                 C.x, C.y, D.x, D.y, ex, ey);
+                                C.x, C.y, D.x, D.y, ex, ey);
     }
 
     if (!ok)
     {
-        // Singular BC || AD case from Figure 6c:
-        // either AB or CD intersection is optimal.
-        // Try the other one, but do NOT invent a midpoint/perpendicular fallback.
-        if (use_AB)
+        actual_use_AB = !actual_use_AB;
+
+        if (actual_use_AB)
         {
             ok = line_line_intersect(a_coeff, b_coeff, c_coeff,
-                                     C.x, C.y, D.x, D.y, ex, ey);
+                                    A.x, A.y, B.x, B.y, ex, ey);
         }
         else
         {
             ok = line_line_intersect(a_coeff, b_coeff, c_coeff,
-                                     A.x, A.y, B.x, B.y, ex, ey);
+                                    C.x, C.y, D.x, D.y, ex, ey);
         }
     }
 
     if (!ok)
     {
         // No valid paper-defined placement found.
+        cand.valid = false;
+        return cand;
+    }
+
+    double t = 0.0;
+
+    if (actual_use_AB)
+    {
+        double vx = B.x - A.x;
+        double vy = B.y - A.y;
+        double len2 = vx * vx + vy * vy;
+
+        if (len2 < EPS)
+        {
+            cand.valid = false;
+            return cand;
+        }
+
+        t = ((ex - A.x) * vx + (ey - A.y) * vy) / len2;
+    }
+    else
+    {
+        double vx = D.x - C.x;
+        double vy = D.y - C.y;
+        double len2 = vx * vx + vy * vy;
+
+        if (len2 < EPS)
+        {
+            cand.valid = false;
+            return cand;
+        }
+
+        t = ((ex - C.x) * vx + (ey - C.y) * vy) / len2;
+    }
+
+    if (t < -2.0 || t > 3.0)
+    {
+        cand.valid = false;
+        return cand;
+    }
+
+    auto dist = [](double x1, double y1, double x2, double y2)
+    {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        return std::sqrt(dx * dx + dy * dy);
+    };
+
+    double ab = dist(A.x, A.y, B.x, B.y);
+    double bc = dist(B.x, B.y, C.x, C.y);
+    double cd = dist(C.x, C.y, D.x, D.y);
+
+    double ae = dist(A.x, A.y, ex, ey);
+    double ed = dist(ex, ey, D.x, D.y);
+
+    double old_perimeter = ab + bc + cd;
+    double new_perimeter = ae + ed;
+
+    double old_max = std::max({ab, bc, cd});
+    double new_max = std::max(ae, ed);
+
+    // reject thin spikes / long detours
+    if (new_perimeter > 1.35 * old_perimeter || new_max > 1.75 * old_max)
+    {
+        cand.valid = false;
+        return cand;
+    }
+
+    if (same_point(ex, ey, A.x, A.y) || same_point(ex, ey, D.x, D.y))
+    {
+        cand.valid = false;
+        return cand;
+    }
+
+    double local_scale = std::max({ab, bc, cd, 1.0});
+
+    if (ae < 1e-6 * local_scale || ed < 1e-6 * local_scale)
+    {
         cand.valid = false;
         return cand;
     }
