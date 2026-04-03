@@ -1,3 +1,16 @@
+
+/* Start Header *****************************************************************/
+/*!
+\file       test_simplify.cpp
+\author     Alyssa Nicole Cerrero Alejandro, 2402435
+\co-author  Chan Qi Ying, 2402302
+\co-author  Choi Meng Yew, 2401822
+\date       Apr 03, 2026
+\brief
+
+*/
+/* End Header *******************************************************************/
+
 #include "polygon.h"
 #include "simplify.h"
 #include "intersect.h"

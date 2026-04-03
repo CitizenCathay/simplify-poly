@@ -3,7 +3,7 @@
 \file       simplify.h
 \author     Choi Meng Yew, 2401822
 \co-author  Chan Qi Ying, 2402302
-\co-author  Alyssa Cerrero Nicole Alejandro, 2402435
+\co-author  Alyssa Nicole Cerrero Alejandro, 2402435
 \date       Apr 03, 2026
 \brief
     Declares the main polygon simplification routine.
