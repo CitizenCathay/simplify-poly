@@ -59,3 +59,12 @@ provided test cases automatically.
 ```bash
 bash run_tests.sh
 ```
+
+## Visualizing results
+
+The repository includes `run_overlay.sh`, which builds svgs that overlay the generated simplifications overlayed against the expected outcome provided. It also generates
+an overlayed SVG for the experimental data sets. You must run run_tests.sh before running this script.
+
+```bash
+bash run_overlay.sh
+```
