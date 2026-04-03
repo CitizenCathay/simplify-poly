@@ -1,8 +1,51 @@
+/* Start Header *****************************************************************/
+/*!
+\file       spatial_index.cpp
+\author     Choi Meng Yew, 2401822
+\co-author  Chan Qi Ying, 2402302
+\co-author  Alyssa Cerrero Nicole Alejandro, 2402435
+\date       Apr 03, 2026
+\brief
+    Implements the uniform-grid spatial index used for segment intersection
+    queries during polygon simplification.
+
+    This source file builds and maintains a grid-based spatial partition of
+    polygon edges so that topology checks can avoid scanning every segment
+    in the polygon. It supports inserting and removing segments as the
+    polygon changes, enumerating the grid cells overlapped by a segment,
+    and testing whether a proposed new edge intersects any existing edge
+    other than explicitly skipped ones.
+
+    The uniform grid improves the efficiency of intersection checking by
+    limiting geometric tests to segments stored in relevant nearby cells.
+*/
+/* End Header *******************************************************************/
+
 #include "spatial_index.h"
 #include "intersect.h"
 #include <cmath>
 #include <algorithm>
 
+/*!
+\brief
+    Builds the uniform grid from the current polygon state.
+
+\details
+    This function computes the bounding box of all active vertices,
+    initializes the grid dimensions and cell sizes, clears any existing
+    grid contents, and inserts every active polygon edge exactly once by
+    traversing each ring.
+
+    If the requested grid resolution is non-positive, the function chooses
+    a default resolution based on the square root of the number of stored
+    vertices.
+
+\param[in] pool
+    The vertex pool containing the polygon geometry.
+\param[in] grid_res
+    The desired grid resolution in both dimensions. If this value is not
+    positive, a default resolution is chosen automatically.
+*/
 void UniformGrid::build(const VertexPool& pool, int grid_res)
 {
     min_x = min_y =  1e18;
@@ -48,9 +91,33 @@ void UniformGrid::build(const VertexPool& pool, int grid_res)
     }
 }
 
+/*!
+\brief
+    Computes the grid cells overlapped by a segment’s axis-aligned bounding box.
+
+\details
+    This function determines the bounding box of the segment P -> Q,
+    converts that box into grid cell coordinates, clamps them to the grid
+    bounds, and outputs the indices of all cells covered by that box.
+
+    The result is used as a coarse spatial filter for insertion,
+    removal, and intersection testing.
+
+\param[in] px
+    The x coordinate of the first segment endpoint.
+\param[in] py
+    The y coordinate of the first segment endpoint.
+\param[in] qx
+    The x coordinate of the second segment endpoint.
+\param[in] qy
+    The y coordinate of the second segment endpoint.
+\param[out] out
+    A vector that is cleared and filled with the indices of overlapped
+    grid cells.
+*/
 void UniformGrid::segment_cells(double px, double py,
-                                 double qx, double qy,
-                                 std::vector<int>& out) const
+                                double qx, double qy,
+                                std::vector<int>& out) const
 {
     // AABB of segment
     double lx = std::min(px, qx);
@@ -69,6 +136,22 @@ void UniformGrid::segment_cells(double px, double py,
             out.push_back(cell_index(c, r));
 }
 
+/*!
+\brief
+    Inserts a segment into all overlapping grid cells.
+
+\details
+    This function determines which grid cells are overlapped by the
+    segment connecting vertices \p u and \p v and appends a segment
+    reference for that edge into each corresponding cell.
+
+\param[in] pool
+    The vertex pool containing the segment endpoints.
+\param[in] u
+    The index of the first endpoint vertex.
+\param[in] v
+    The index of the second endpoint vertex.
+*/
 void UniformGrid::insert_segment(const VertexPool& pool, int u, int v)
 {
     std::vector<int> cs;
@@ -78,6 +161,23 @@ void UniformGrid::insert_segment(const VertexPool& pool, int u, int v)
         cells[ci].push_back({u, v});
 }
 
+/*!
+\brief
+    Removes a segment from all overlapping grid cells.
+
+\details
+    This function finds the grid cells overlapped by the segment
+    connecting vertices \p u and \p v and removes any matching segment
+    references from those cells. The comparison is performed without
+    regard to endpoint order.
+
+\param[in] pool
+    The vertex pool containing the segment endpoints.
+\param[in] u
+    The index of the first endpoint vertex.
+\param[in] v
+    The index of the second endpoint vertex.
+*/
 void UniformGrid::remove_segment(const VertexPool& pool, int u, int v)
 {
     std::vector<int> cs;
@@ -93,25 +193,56 @@ void UniformGrid::remove_segment(const VertexPool& pool, int u, int v)
     }
 }
 
+/*!
+\brief
+    Tests whether a segment intersects any non-skipped segment in the grid.
+
+\details
+    This function computes the grid cells overlapped by the query segment
+    P -> Q, iterates through all stored segment references in those cells,
+    ignores any segments listed in the skip set, and performs precise
+    intersection tests against the remaining segments.
+
+    It is used during topology validation to determine whether a proposed
+    new edge would intersect any existing polygon edge.
+
+\param[in] pool
+    The vertex pool containing the stored segment endpoints.
+\param[in] px
+    The x coordinate of the first query endpoint.
+\param[in] py
+    The y coordinate of the first query endpoint.
+\param[in] qx
+    The x coordinate of the second query endpoint.
+\param[in] qy
+    The y coordinate of the second query endpoint.
+\param[in] skip_segs
+    A list of segments that should be ignored during the query. Each
+    segment is represented as a pair of endpoint indices.
+
+\return
+    Returns true if an intersection is found and false otherwise.
+*/
 bool UniformGrid::has_intersection(const VertexPool& pool,
-                                    double px, double py,
-                                    double qx, double qy,
-                                    const std::vector<std::pair<int,int>>& skip_segs) const
+                                   double px, double py,
+                                   double qx, double qy,
+                                   const std::vector<std::pair<int,int>>& skip_segs) const
 {
     std::vector<int> cs;
-    // cast away const for segment_cells (it's logically const)
     const_cast<UniformGrid*>(this)->segment_cells(px, py, qx, qy, cs);
 
     for (int ci : cs)
     {
         for (auto& seg : cells[ci])
         {
-            // skip segments involved in this collapse
             bool skip = false;
             for (auto& [su, sv] : skip_segs)
             {
                 if ((seg.u == su && seg.v == sv) || (seg.u == sv && seg.v == su))
-                { skip = true; break; }
+                {
+                    skip = true;
+                    break;
+                }
             }
             if (skip) continue;
 

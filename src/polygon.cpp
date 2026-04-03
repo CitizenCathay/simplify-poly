@@ -1,3 +1,25 @@
+/* Start Header *****************************************************************/
+/*!
+\file       polygon.cpp
+\author     Choi Meng Yew, 2401822
+\co-author  Chan Qi Ying, 2402302
+\co-author  Alyssa Cerrero Nicole Alejandro, 2402435
+\date       Apr 03, 2026
+\brief
+    Implements CSV loading, ring traversal, area computation, and CSV
+    output for the polygon vertex pool.
+
+    This source file defines the member functions of the VertexPool class.
+    It is responsible for reading polygon data from the project CSV format,
+    constructing the circular doubly linked representation for each ring,
+    querying ring sizes, computing signed areas using the shoelace formula,
+    and writing the current polygon state back to standard output.
+
+    The implementation assumes the input rows are ordered by ring id and
+    vertex id as specified by the project format.
+*/
+/* End Header *******************************************************************/
+
 #include "polygon.h"
 #include <fstream>
 #include <sstream>
@@ -6,8 +28,30 @@
 #include <iostream>
 #include <iomanip>
 
-// ── CSV parser ────────────────────────────────────────────────────────────────
+/*!
+\brief
+    Loads polygon data from a CSV file into the vertex pool.
 
+\details
+    This function opens the specified CSV file, skips the header row,
+    reads all vertex records, determines the total number of rings,
+    allocates storage for all vertices, and builds a circular doubly
+    linked list for each ring.
+
+    The function assumes that the CSV rows are already sorted by ring id
+    and then by vertex id, matching the project specification. Each ring
+    is stored as a circular sequence so that traversal can move efficiently
+    through previous and next vertices.
+
+    If the file cannot be opened or contains no vertex data, the function
+    throws a runtime error.
+
+\param[in] path
+    The path to the input CSV file.
+
+\exception std::runtime_error
+    Thrown if the file cannot be opened or if no vertex data is found.
+*/
 void VertexPool::load_csv(const std::string& path)
 {
     std::ifstream file(path);
@@ -79,16 +123,44 @@ void VertexPool::load_csv(const std::string& path)
     }
 }
 
-// ── traversal ─────────────────────────────────────────────────────────────────
+/*!
+\brief
+    Returns the number of active vertices stored in a ring.
 
+\details
+    This function retrieves the recorded size of the specified ring from
+    the ring size table maintained by the vertex pool.
+
+\param[in] ring_id
+    The id of the ring whose size is being queried.
+
+\return
+    Returns the number of vertices currently stored in the ring.
+*/
 int VertexPool::ring_size(int ring_id) const
 {
     return ring_sizes[ring_id];
 }
 
-// ── geometry ──────────────────────────────────────────────────────────────────
+/*!
+\brief
+    Computes the signed area of a ring.
 
-// shoelace formula — positive for CCW, negative for CW
+\details
+    This function applies the shoelace formula to the vertices of the
+    specified ring by traversing its circular linked structure. The result
+    is positive for counterclockwise rings and negative for clockwise rings.
+
+    This signed convention is useful because the exterior ring is expected
+    to contribute positive area, while interior rings contribute negative
+    area.
+
+\param[in] ring_id
+    The id of the ring whose signed area is to be computed.
+
+\return
+    Returns the signed area of the specified ring.
+*/
 double VertexPool::signed_area(int ring_id) const
 {
     double area = 0.0;
@@ -103,6 +175,18 @@ double VertexPool::signed_area(int ring_id) const
     return area * 0.5;
 }
 
+/*!
+\brief
+    Computes the total signed area of the polygon.
+
+\details
+    This function sums the signed areas of all rings in the vertex pool.
+    With the project’s ring orientation convention, the exterior ring
+    contributes positive area and each hole contributes negative area.
+
+\return
+    Returns the total signed area across all rings.
+*/
 double VertexPool::total_signed_area() const
 {
     double total = 0.0;
@@ -111,8 +195,22 @@ double VertexPool::total_signed_area() const
     return total;
 }
 
-// ── output ────────────────────────────────────────────────────────────────────
+/*!
+\brief
+    Writes the current polygon data to standard output in CSV format.
 
+\details
+    This function prints the required CSV header followed by one row for
+    each vertex in every ring. Vertices are output in ring order, and each
+    ring is traversed through its circular linked structure. Vertex ids are
+    regenerated contiguously during output.
+
+    Coordinates are written with high precision so that the output preserves
+    enough detail for floating-point round-tripping.
+
+\return
+    This function does not return a value.
+*/
 void VertexPool::write_csv() const
 {
     std::cout << std::setprecision(15);

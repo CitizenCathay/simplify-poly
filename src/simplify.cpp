@@ -1,10 +1,41 @@
+/* Start Header *****************************************************************/
+/*!
+\file       simplify.cpp
+\author     Choi Meng Yew, 2401822
+\co-author  Chan Qi Ying, 2402302
+\co-author  Alyssa Cerrero Nicole Alejandro, 2402435
+\date       Apr 03, 2026
+\brief
+    Implements the main area-preserving polygon simplification algorithm.
+
+    This source file contains the core APSC-based simplification routine.
+    It constructs and maintains a priority queue of collapse candidates,
+    selects the minimum-displacement candidate, verifies topology
+    constraints using a spatial index, and applies valid collapses until
+    the target vertex count is reached.
+
+    The algorithm incrementally updates the polygon structure, spatial
+    index, and candidate queue while preserving area and preventing
+    self-intersections.
+*/
+/* End Header *******************************************************************/
+
 #include "simplify.h"
 #include "collapse.h"
 #include "spatial_index.h"
 #include <queue>
 #include <vector>
 
-// min-heap comparator
+/*!
+\struct CandCmp
+\brief
+    Comparator for ordering collapse candidates in a min-heap.
+
+\details
+    Candidates are ordered primarily by increasing areal displacement.
+    Ties are broken deterministically using vertex indices to ensure
+    stable and reproducible behavior.
+*/
 struct CandCmp
 {
     bool operator()(const Candidate& lhs, const Candidate& rhs) const
@@ -21,6 +52,16 @@ struct CandCmp
     }
 };
 
+/*!
+\brief
+    Computes the total number of active vertices across all rings.
+
+\param[in] pool
+    The vertex pool containing all rings.
+
+\return
+    Returns the total number of active vertices.
+*/
 static int total_vertices(const VertexPool& pool)
 {
     int n = 0;
@@ -29,8 +70,23 @@ static int total_vertices(const VertexPool& pool)
     return n;
 }
 
-// returns a,b,c,d for the candidate starting at vertex b
-// (b's prev = a, b's next = c, c's next = d)
+/*!
+\brief
+    Constructs a collapse candidate centered at vertex b.
+
+\details
+    This function identifies the four consecutive vertices
+    A -> B -> C -> D using the ring connectivity and constructs
+    the corresponding collapse candidate.
+
+\param[in] pool
+    The vertex pool containing the polygon data.
+\param[in] b
+    The index of the central vertex B.
+
+\return
+    Returns the constructed Candidate.
+*/
 static Candidate candidate_at(const VertexPool& pool, int b)
 {
     int a = pool.prev_of(b);
@@ -39,6 +95,31 @@ static Candidate candidate_at(const VertexPool& pool, int b)
     return make_candidate(pool, a, b, c, d);
 }
 
+/*!
+\brief
+    Simplifies the polygon to a target number of vertices.
+
+\details
+    This function implements the APSC simplification loop. It builds an
+    initial priority queue of collapse candidates, repeatedly selects the
+    candidate with minimum areal displacement, verifies its validity and
+    topology constraints, and applies the collapse if valid.
+
+    The algorithm maintains a spatial index to efficiently detect
+    intersections introduced by new edges. After each collapse, affected
+    candidates are updated and reinserted into the priority queue.
+
+    The process continues until the total number of vertices is reduced
+    to the specified target or no valid candidates remain.
+
+\param[in,out] pool
+    The vertex pool representing the polygon. It is modified in place.
+\param[in] target_vertices
+    The desired maximum number of vertices after simplification.
+
+\return
+    Returns the total accumulated areal displacement.
+*/
 double simplify(VertexPool& pool, int target_vertices)
 {
     double total_displacement = 0.0;
@@ -51,7 +132,6 @@ double simplify(VertexPool& pool, int target_vertices)
     grid.build(pool);
 
     // build initial priority queue — one candidate per pair (b,c)
-    // we index candidates by b (the first of the two removed vertices)
     std::priority_queue<Candidate, std::vector<Candidate>, CandCmp> pq;
 
     for (int r = 0; r < pool.num_rings; ++r)
@@ -72,45 +152,39 @@ double simplify(VertexPool& pool, int target_vertices)
         Candidate cand = pq.top();
         pq.pop();
 
-        // stale check: any of a,b,c,d deactivated since this was pushed?
         auto& verts = pool.verts;
+
+        // skip stale candidates
         if (!verts[cand.a].active || !verts[cand.b].active ||
             !verts[cand.c].active || !verts[cand.d].active)
             continue;
 
-        // verify a->b->c->d are still consecutive
+        // verify connectivity
         if (pool.next_of(cand.a) != cand.b) continue;
         if (pool.next_of(cand.b) != cand.c) continue;
         if (pool.next_of(cand.c) != cand.d) continue;
 
-        // ring must keep at least 3 vertices
         int r = verts[cand.b].ring_id;
         if (pool.ring_size(r) <= 3) continue;
 
-        // recompute candidate with current vertex positions
-        // (prior collapses may have moved vertices a, b, c, or d)
+        // recompute candidate
         cand = make_candidate(pool, cand.a, cand.b, cand.c, cand.d);
         if (!cand.valid) continue;
 
-        // topology check: do new segments AE and ED intersect anything?
-        // segments being removed: AB, BC, CD
-        // segments adjacent (sharing endpoint): prev_A->A for A->E, D->next_D for E->D
+        // topology check
         int prev_a = pool.prev_of(cand.a);
         int next_d = pool.next_of(cand.d);
 
-        // Each skip list includes the three removed segments plus BOTH adjacent
-        // segments (the one sharing A and the one sharing D). This prevents
-        // false intersection hits from segments that share the new edge's
-        // far endpoint after the grid has been updated by prior collapses.
         std::vector<std::pair<int,int>> skip_ae = {
-            {cand.a, cand.b}, {cand.b, cand.c}, {cand.c, cand.d},  // removed
-            {prev_a, cand.a},  // shares endpoint A with new edge A->E
-            {cand.d, next_d}   // shares endpoint E (far end of A->E) with E->D
+            {cand.a, cand.b}, {cand.b, cand.c}, {cand.c, cand.d},
+            {prev_a, cand.a},
+            {cand.d, next_d}
         };
+
         std::vector<std::pair<int,int>> skip_ed = {
-            {cand.a, cand.b}, {cand.b, cand.c}, {cand.c, cand.d},  // removed
-            {cand.d, next_d},  // shares endpoint D with new edge E->D
-            {prev_a, cand.a}   // shares endpoint E (near end of E->D) with A->E
+            {cand.a, cand.b}, {cand.b, cand.c}, {cand.c, cand.d},
+            {cand.d, next_d},
+            {prev_a, cand.a}
         };
 
         bool ok = true;
@@ -126,23 +200,21 @@ double simplify(VertexPool& pool, int target_vertices)
 
         if (!ok) continue;
 
-        // ── perform collapse ──────────────────────────────────────────
+        // perform collapse
 
-        // remove old segments from grid
         grid.remove_segment(pool, cand.a, cand.b);
         grid.remove_segment(pool, cand.b, cand.c);
         grid.remove_segment(pool, cand.c, cand.d);
 
-        // reuse vertex b as E, deactivate c
+        // reuse b as E
         verts[cand.b].x = cand.ex;
         verts[cand.b].y = cand.ey;
         verts[cand.c].active = false;
 
-        // update ring head if it pointed to the deactivated vertex
         if (pool.ring_heads[r] == cand.c)
             pool.ring_heads[r] = cand.d;
 
-        // relink: a <-> b <-> d
+        // relink
         verts[cand.a].next = cand.b;
         verts[cand.b].prev = cand.a;
         verts[cand.b].next = cand.d;
@@ -151,20 +223,18 @@ double simplify(VertexPool& pool, int target_vertices)
         pool.ring_sizes[r]--;
         total_displacement += cand.displacement;
 
-        // insert new segments into grid
         grid.insert_segment(pool, cand.a, cand.b);
         grid.insert_segment(pool, cand.b, cand.d);
 
-        // push updated candidates for affected neighbors
-        // affected: the new b (was b, now E) and a and d
+        // update affected candidates
         if (pool.ring_size(r) >= 4)
         {
             pq.push(candidate_at(pool, cand.a));
             pq.push(candidate_at(pool, cand.b));
-            // also the vertex before a and after d
             pq.push(candidate_at(pool, pool.prev_of(cand.a)));
             pq.push(candidate_at(pool, cand.d));
         }
     }
+
     return total_displacement;
 }

@@ -1,3 +1,28 @@
+/* Start Header *****************************************************************/
+/*!
+\file       collapse.cpp
+\author     Choi Meng Yew, 2401822
+\co-author  Chan Qi Ying, 2402302
+\co-author  Alyssa Cerrero Nicole Alejandro, 2402435
+\date       Apr 03, 2026
+\brief
+    Implements helper routines and candidate construction logic for the
+    area-preserving segment collapse algorithm.
+
+    This source file computes the replacement vertex E for a four-vertex
+    sequence A -> B -> C -> D using the area-preserving placement rules
+    derived from the APSC method. It also computes the associated areal
+    displacement for the collapse candidate and handles both regular and
+    singular geometric configurations.
+
+    Internal helper functions are used for line-line intersection,
+    segment-segment intersection, and signed or unsigned triangle area
+    calculations. The main public function defined in this file is
+    `make_candidate`, which creates a collapse candidate from four
+    consecutive vertices in the vertex pool.
+*/
+/* End Header *******************************************************************/
+
 #include "collapse.h"
 #include <cmath>
 #include <limits>
@@ -6,8 +31,43 @@ namespace
 {
     constexpr double EPS = 1e-12;
 
-    // intersect line (a*x + b*y + c = 0) with segment line through P->Q
-    // returns true if not parallel, sets (ix, iy)
+    /*!
+    \brief
+        Computes the intersection between an implicit line and the line
+        passing through two points.
+
+    \details
+        The implicit line is given by the equation
+        a * x + b * y + c = 0, while the second line is defined by the
+        points P and Q. If the two lines are not parallel, the function
+        computes their intersection point and stores it in the output
+        references.
+
+        This routine works with the infinite line through P and Q rather
+        than restricting the solution to the segment itself.
+
+    \param[in]  a
+        The x coefficient of the implicit line equation.
+    \param[in]  b
+        The y coefficient of the implicit line equation.
+    \param[in]  c
+        The constant term of the implicit line equation.
+    \param[in]  px
+        The x coordinate of point P.
+    \param[in]  py
+        The y coordinate of point P.
+    \param[in]  qx
+        The x coordinate of point Q.
+    \param[in]  qy
+        The y coordinate of point Q.
+    \param[out] ix
+        The x coordinate of the computed intersection point.
+    \param[out] iy
+        The y coordinate of the computed intersection point.
+
+    \return
+        Returns true if the lines intersect and false if they are parallel.
+    */
     static bool line_line_intersect(double a, double b, double c,
                                     double px, double py,
                                     double qx, double qy,
@@ -24,6 +84,31 @@ namespace
         return true;
     }
 
+    /*!
+    \brief
+        Computes the unsigned area of a triangle.
+
+    \details
+        This helper returns the absolute area of the triangle formed by
+        the three input points. It is used when summing the magnitude of
+        swept regions or lobe areas without regard to orientation.
+
+    \param[in]  ax
+        The x coordinate of the first vertex.
+    \param[in]  ay
+        The y coordinate of the first vertex.
+    \param[in]  bx
+        The x coordinate of the second vertex.
+    \param[in]  by
+        The y coordinate of the second vertex.
+    \param[in]  cx
+        The x coordinate of the third vertex.
+    \param[in]  cy
+        The y coordinate of the third vertex.
+
+    \return
+        Returns the absolute area of the triangle.
+    */
     static double tri_abs(double ax, double ay,
                           double bx, double by,
                           double cx, double cy)
@@ -31,6 +116,33 @@ namespace
         return 0.5 * std::abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
     }
 
+
+    /*!
+    \brief
+        Computes the signed area of a triangle.
+
+    \details
+        The result is positive or negative depending on the orientation
+        of the three input points. This is useful for determining local
+        turning direction and detecting whether swept subregions have
+        consistent orientation.
+
+    \param[in]  ax
+        The x coordinate of the first vertex.
+    \param[in]  ay
+        The y coordinate of the first vertex.
+    \param[in]  bx
+        The x coordinate of the second vertex.
+    \param[in]  by
+        The y coordinate of the second vertex.
+    \param[in]  cx
+        The x coordinate of the third vertex.
+    \param[in]  cy
+        The y coordinate of the third vertex.
+
+    \return
+        Returns the signed area of the triangle.
+    */
     static double tri_signed(double ax, double ay,
                               double bx, double by,
                               double cx, double cy)
@@ -38,8 +150,44 @@ namespace
         return 0.5 * ((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
     }
 
-    // Find intersection point of segment P1->P2 with segment Q1->Q2.
-    // Returns true and sets (ix,iy) if they properly cross (not at shared endpoints).
+    /*!
+    \brief
+        Tests whether two line segments properly intersect.
+
+    \details
+        This function checks whether segment P1 -> P2 and segment
+        Q1 -> Q2 cross at a proper interior intersection point.
+        Shared endpoints and parallel or collinear overlaps are not
+        considered valid intersections by this routine.
+
+        If a proper crossing exists, the intersection point is written
+        to the output coordinates.
+
+    \param[in]  p1x
+        The x coordinate of the first endpoint of segment P.
+    \param[in]  p1y
+        The y coordinate of the first endpoint of segment P.
+    \param[in]  p2x
+        The x coordinate of the second endpoint of segment P.
+    \param[in]  p2y
+        The y coordinate of the second endpoint of segment P.
+    \param[in]  q1x
+        The x coordinate of the first endpoint of segment Q.
+    \param[in]  q1y
+        The y coordinate of the first endpoint of segment Q.
+    \param[in]  q2x
+        The x coordinate of the second endpoint of segment Q.
+    \param[in]  q2y
+        The y coordinate of the second endpoint of segment Q.
+    \param[out] ix
+        The x coordinate of the intersection point.
+    \param[out] iy
+        The y coordinate of the intersection point.
+
+    \return
+        Returns true if the two segments properly intersect and false
+        otherwise.
+    */
     static bool seg_seg_intersect(double p1x, double p1y,
                                   double p2x, double p2y,
                                   double q1x, double q1y,
@@ -59,6 +207,41 @@ namespace
     }
 }
 
+/*!
+\brief
+    Constructs a collapse candidate for a four-vertex sequence.
+
+\details
+    This function builds a Candidate corresponding to the sequence
+    A -> B -> C -> D in the given vertex pool. It computes the
+    paper-defined area-preserving line for the new replacement vertex E,
+    chooses whether E should lie on AB or CD according to the geometric
+    configuration, and then calculates the unsigned areal displacement
+    produced by replacing A -> B -> C -> D with A -> E -> D.
+
+    If the configuration is degenerate or no valid placement can be found
+    using the rules defined by the method, the returned candidate is
+    marked as invalid.
+
+    The displacement calculation supports both simple swept regions and
+    self-intersecting figure-eight cases by detecting crossings and
+    summing the appropriate unsigned lobe areas.
+
+\param[in] pool
+    The vertex pool containing all vertices referenced by the candidate.
+\param[in] a
+    The index of vertex A in the vertex pool.
+\param[in] b
+    The index of vertex B in the vertex pool.
+\param[in] c
+    The index of vertex C in the vertex pool.
+\param[in] d
+    The index of vertex D in the vertex pool.
+
+\return
+    Returns a fully initialized Candidate. If no valid placement exists,
+    the returned candidate has its `valid` field set to false.
+*/
 Candidate make_candidate(const VertexPool& pool, int a, int b, int c, int d)
 {
     Candidate cand;
