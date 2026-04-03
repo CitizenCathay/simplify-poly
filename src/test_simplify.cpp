@@ -1,4 +1,3 @@
-
 /* Start Header *****************************************************************/
 /*!
 \file       test_simplify.cpp
@@ -7,7 +6,17 @@
 \co-author  Choi Meng Yew, 2401822
 \date       Apr 03, 2026
 \brief
+    Implements the test harness for polygon simplification verification.
 
+    This source file provides a standalone test suite that validates the
+    polygon simplification algorithm against the three rubric criteria:
+    area preservation within tolerance, topology preservation (no self-
+    intersections or ring crossings), and ring count unchanged.
+
+    The test harness loads polygon data from CSV files, runs the simplification
+    algorithm, compares original and final states, and outputs detailed
+    verification results. It supports both single test execution via command
+    line and batch testing through the included test cases.
 */
 /* End Header *******************************************************************/
 
@@ -21,8 +30,24 @@
 #include <string>
 #include <iomanip>
 
-// Checks if a single ring has any self-intersections
-// Returns true if ring is valid, false if self-intersection found
+/*!
+\brief
+    Checks if a single ring has any self-intersections.
+
+\details
+    This function collects all edges in the specified ring and tests each
+    pair of non-adjacent edges for intersection. Rings with fewer than
+    four vertices cannot self-intersect and are automatically considered
+    valid.
+
+\param[in] pool
+    The vertex pool containing the polygon geometry.
+\param[in] ring_id
+    The identifier of the ring to check.
+
+\return
+    Returns true if the ring has no self-intersections, false otherwise.
+*/
 bool check_ring_no_self_intersections(const VertexPool& pool, int ring_id) {
     // Rings with less than 4 vertices cannot self-intersect
     if (pool.ring_size(ring_id) < 4) return true;
@@ -64,9 +89,23 @@ bool check_ring_no_self_intersections(const VertexPool& pool, int ring_id) {
     return true;
 }
 
-// Validates entire polygon topology
-// Checks: no self-intersections in any ring, no crossings between rings
-// Returns true if topology is valid, false otherwise
+/*!
+\brief
+    Validates the entire polygon topology.
+
+\details
+    This function performs comprehensive topology validation by checking
+    each ring for self-intersections and testing all ring pairs for
+    crossings. It ensures the polygon meets the topology preservation
+    requirement of the rubric.
+
+\param[in] pool
+    The vertex pool containing the polygon geometry.
+
+\return
+    Returns true if the polygon has valid topology (no self-intersections,
+    no ring crossings), false otherwise.
+*/
 bool validate_topology(const VertexPool& pool) {
     std::cout << "Validating topology...\n";
     
@@ -119,9 +158,27 @@ bool validate_topology(const VertexPool& pool) {
     return true;
 }
 
-// Main test function
-// Compares original polygon state with simplified state
-// Verifies three rubric criteria: area preservation, topology, ring count
+/*!
+\brief
+    Runs a single test case for polygon simplification.
+
+\details
+    This function executes the complete test workflow for a single polygon:
+    loading the input CSV, recording the original state, running the
+    simplification algorithm, recording the final state, and verifying
+    the three rubric criteria (area preservation, topology preservation,
+    and ring count unchanged).
+
+    Results are printed to standard output in a human-readable format
+    suitable for inclusion in documentation.
+
+\param[in] name
+    A descriptive name for the test case.
+\param[in] input_file
+    The file path to the input polygon in CSV format.
+\param[in] target_vertices
+    The target maximum number of vertices for simplification.
+*/
 void run_test(const std::string& name, 
               const std::string& input_file,
               int target_vertices) {
@@ -205,8 +262,25 @@ void run_test(const std::string& name,
     }
 }
 
-// Program entry point
-// Expects three command line arguments: test name, input file path, target vertex count
+/*!
+\brief
+    Program entry point for the test harness.
+
+\details
+    This function parses command-line arguments and executes the test suite.
+    It expects three arguments: a test name, an input CSV file path, and a
+    target vertex count. If the arguments are incorrect, usage information
+    is displayed.
+
+\param[in] argc
+    The number of command-line arguments.
+\param[in] argv
+    The array of command-line argument strings.
+
+\return
+    Returns 0 on successful test execution, or when usage information is
+    displayed.
+*/
 int main(int argc, char* argv[]) {
     std::cout << "========================================\n";
     std::cout << "Polygon Simplification Test Suite\n";
