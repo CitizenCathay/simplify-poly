@@ -79,3 +79,31 @@ If you encounter an error like `invalid option name set: pipefail` when running 
 ```bash
 sed -i 's/\r$//' <filename>.sh
 ```
+## Testing and Verification
+
+This implementation has been verified against the three rubric criteria:
+1. Area preservation within floating-point tolerance (1e-6)
+2. Topology preservation (no self-intersections, no ring crossings)
+3. Ring count unchanged
+
+### Test Suite
+
+A standalone test harness `test_simplify.cpp` is included to validate the
+simplification algorithm against the rubric requirements.
+
+#### Building the Test Harness
+
+```bash
+cd src
+```
+
+```bash
+g++ -std=c++17 -o test test_simplify.cpp polygon.cpp simplify.cpp collapse.cpp intersect.cpp spatial_index.cpp
+```
+
+```bash
+./test "Square Test" ../tests/input/test_square.csv 3
+./test "Pentagon Test" ../tests/input/test_pentagon.csv 4
+./test "Hexagon with Hole" ../tests/input/test_hexagon_with_hole.csv 6
+./test "Complex Test" ../tests/input/test_complex.csv 6
+```
